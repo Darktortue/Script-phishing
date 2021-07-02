@@ -10,7 +10,7 @@ debian_initialize() {
 	echo "Updating and Installing Dependicies"
 	apt update -y
 	apt upgrade -y
-	apt install git nmap golang unzip -y
+	apt install git nmap golang dnsutils unzip -y
 
 	update-rc.d nfs-common disable > /dev/null 2>&1
 	update-rc.d rpcbind disable > /dev/null 2>&1
@@ -115,33 +115,13 @@ reset_firewall() {
 
 
 install_ssl_Cert() {
-	git clone https://github.com/certbot/certbot.git /opt/letsencrypt
-
-	cd /opt/letsencrypt
-	letsencryptdomains=()
-	end="false"
-	i=0
-	
-	while [ "$end" != "true" ]
-	do
-		read -p "Enter your server's domain or done to exit: " -r domain
-		if [ "$domain" != "done" ]
-		then
-			letsencryptdomains[$i]=$domain
-		else
-			end="true"
-		fi
-		((i++))
-	done
-	command="./certbot-auto certonly --standalone "
-	for i in "${letsencryptdomains[@]}";
-		do
-			command="$command -d $i"
-		done
-	command="$command -n --register-unsafely-without-email --agree-tos"
-	
-	eval $command
-
+	echo -e "Remember to setup an A record in order for certbot to establish a connection to generate certificates..."
+    sleep 2
+    apt install certbot -y
+    read -p "Enter your server's domain : " -r domain
+    certbot certonly --register-unsafely-without-email --agree-tos --standalone -d "$domain"
+    ls /etc/letsencrypt/live/$domain/fullchain.pem
+    ls /etc/letsencrypt/live/$domain/privkey.pem
 }
 
 install_postfix_dovecot() {
@@ -237,9 +217,11 @@ install_postfix_dovecot() {
 
 	echo "Configuring opendmarc"
 
+	chown -R opendmarc:opendmarc /var/run/opendmarc/
+
 	cat <<-EOF > /etc/opendmarc.conf
 	AuthservID ${primary_domain}
-	PidFile /var/run/opendmarc.pid
+	PidFile /var/run/opendmarc/opendmarc.pid
 	RejectFailures false
 	Syslog true
 	TrustedAuthservIDs ${primary_domain}
@@ -333,7 +315,7 @@ function add_alias(){
 }
 
 function get_dns_entries(){
-	extip=$(ifconfig|grep 'Link encap\|inet '|awk '!/Loopback|:127./'|tr -s ' '|grep 'inet'|tr ':' ' '|cut -d" " -f4)
+	extip=$(dig +short myip.opendns.com @resolver1.opendns.com)
 	domain=$(ls /etc/opendkim/keys/ | head -1)
 	fields=$(echo "${domain}" | tr '.' '\n' | wc -l)
 	dkimrecord=$(cut -d '"' -f 2 "/etc/opendkim/keys/${domain}/mail.txt" | tr -d "[:space:]")
@@ -413,64 +395,6 @@ function get_dns_entries(){
 
 }
 
-setupSSH(){
-	apt install sudo -y
-	apt install fail2ban -y
-
-	echo "Create a User to ssh into this system securely"
-
-	read -p "Enter your user name: " -r user_name
-
-	adduser $user_name
-
-	usermod -aG sudo $user_name
-
-	cat <<-EOF > /etc/ssh/sshd_config
-	Port 22
-	Protocol 2
-	HostKey /etc/ssh/ssh_host_rsa_key
-	HostKey /etc/ssh/ssh_host_dsa_key
-	HostKey /etc/ssh/ssh_host_ecdsa_key
-	#Privilege Separation is turned on for security
-	UsePrivilegeSeparation yes
-	KeyRegenerationInterval 3600
-	ServerKeyBits 1024
-	SyslogFacility AUTH
-	LogLevel INFO
-	LoginGraceTime 120
-	PermitRootLogin no
-	StrictModes yes
-	RSAAuthentication yes
-	PubkeyAuthentication yes
-	IgnoreRhosts yes
-	RhostsRSAAuthentication no
-	HostbasedAuthentication no
-	PermitEmptyPasswords no
-	ChallengeResponseAuthentication no
-	PasswordAuthentication yes
-	X11Forwarding yes
-	X11DisplayOffset 10
-	PrintMotd no
-	PrintLastLog yes
-	TCPKeepAlive yes
-	Banner no
-	AcceptEnv LANG LC_*
-	Subsystem sftp /usr/lib/openssh/sftp-server
-	UsePAM yes
-	EOF
-
-	echo "AllowUsers ${user_name}" > /etc/ssh/sshd_config
-
-	cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
-
-	cd /home/$user_name
-	runuser -l $user_name -c "mkdir '.ssh'"
-	runuser -l $user_name -c "chmod 700 ~/.ssh"
-
-	service ssh restart
-
-}
-
 
 function Install_GoPhish {
 	mkdir -p /opt/gophish
@@ -527,24 +451,22 @@ function Install_GoPhish {
 
 
 PS3="Server Setup Script - Pick an option: "
-options=("Debian Prep" "Setup SSH"  "Install SSL" "Install Mail Server" "Add Aliases" "Get DNS Entries" "Install GoPhish")
+options=("Debian Prep" "Install SSL" "Install Mail Server" "Add Aliases" "Get DNS Entries" "Install GoPhish")
 select opt in "${options[@]}" "Quit"; do
 
     case "$REPLY" in
 
 	1) debian_initialize;;
 
-    2) setupSSH;;
+	2) install_ssl_Cert;;
 
-	3) install_ssl_Cert;;
+	3) install_postfix_dovecot;;
 
-	4) install_postfix_dovecot;;
+	4) add_alias;;
 
-	5) add_alias;;
+	5) get_dns_entries;;
 
-	6) get_dns_entries;;
-
-	7) Install_GoPhish;;
+	6) Install_GoPhish;;
 
     $(( ${#options[@]}+1 )) ) echo "Goodbye!"; break;;
     *) echo "Invalid option. Try another one.";continue;;
@@ -552,4 +474,3 @@ select opt in "${options[@]}" "Quit"; do
     esac
 
 done
-
