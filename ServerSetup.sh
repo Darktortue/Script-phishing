@@ -9,35 +9,44 @@ debian_init() {
 	echo "Updating and installing dependicies"
 	apt update -y
 	apt upgrade -y
-	apt install git nmap golang dnsutils unzip -y
+	apt install git nmap curl golang dnsutils unzip -y
 
 	update-rc.d nfs-common disable > /dev/null 2>&1
 	update-rc.d rpcbind disable > /dev/null 2>&1
 
-	echo "Changing Hostname"
+	read -rp "Do you need to change the hostname of the machine ? (yY/nN) " answer
+	case ${answer:0:1} in
+		y|Y )
+			echo "Changing Hostname"
 
-	read -p "Enter your hostname: " -r primary_domain
+			read -p "Enter your hostname: " -r primary_domain
 
-	cat <<-EOF > /etc/hosts
-	127.0.1.1 $primary_domain $primary_domain
-	127.0.0.1 localhost
-	EOF
+			cat <<-EOF > /etc/hosts
+			127.0.1.1 $primary_domain $primary_domain
+			127.0.0.1 localhost
+			EOF
 
-	cat <<-EOF > /etc/hostname
-	$primary_domain
-	EOF
+			cat <<-EOF > /etc/hostname
+			$primary_domain
+			EOF
 
-	echo
+			echo
 
-	echo "The system will now reboot !"
-	echo
-	echo "3..."
-	sleep 1
-	echo "2..."
-	sleep 1
-	echo "1..."
-	sleep 1
-	reboot
+			echo "The system will now reboot !"
+			echo
+			echo "3..."
+			sleep 1
+			echo "2..."
+			sleep 1
+			echo "1..."
+			sleep 1
+			reboot
+		;;
+		* )
+			echo "Dependencies installed !"
+			sleep 1
+		;;
+	esac
 }
 
 
@@ -210,6 +219,7 @@ install_postfix() {
 	KeyFile						/etc/opendkim/keys/${primary_domain}/mail.private
 	Selector					mail
 	Mode						sv
+	PidFile						/var/run/opendkim/opendkim.pid
 	SignatureAlgorithm			rsa-sha256
 	UserID						opendkim:opendkim
 	Socket						inet:12301@localhost
@@ -257,15 +267,16 @@ install_postfix() {
 
 	sleep 1
 
+	echo
 	echo "Restarting services..."
-	systemctl restart postfix
-	systemctl restart opendkim
-	systemctl restart opendmarc
+	systemctl restart postfix.service
+	systemctl restart opendkim.service
+	systemctl restart opendmarc.service
 
 	echo "Checking services status..."
-	systemctl --no-pager status postfix 
-	systemctl --no-pager status opendkim 
-	systemctl --no-pager status opendmarc
+	systemctl --no-pager status postfix.service
+	systemctl --no-pager status opendkim.service
+	systemctl --no-pager status opendmarc.service
 
 	sleep 2
 }
@@ -329,7 +340,7 @@ function dns_entries(){
 }
 
 
-function Install_GoPhish {
+function install_gophish {
 	mkdir -vp /opt/gophish
 	cd /opt/gophish || exit
 	wget https://github.com/gophish/gophish/releases/download/v0.11.0/gophish-v0.11.0-linux-64bit.zip
@@ -408,9 +419,9 @@ select opt in "${options[@]}" "Quit"; do
 
 	6) dns_entries;;
 
-	7) Install_GoPhish;;
+	7) install_gophish;;
 
-    $(( ${#options[@]}+1 )) ) echo "Goodbye!"; break;;
+    $(( ${#options[@]}+1 )) ) echo "Goodbye ! I hope you gonna catch many fishes ;) "; break;;
     *) echo "Invalid option. Try another one.";continue;;
 
     esac
