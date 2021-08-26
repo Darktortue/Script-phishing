@@ -301,11 +301,6 @@ function dns_entries(){
 
 	====================================================================
 
-	Record Type: A
-	Host: @
-	Value: ${extip}
-	TTL: 5 min
-
 	Record Type: TXT
 	Host: @
 	Value: v=spf1 ip4:${extip} -all
@@ -322,12 +317,11 @@ function dns_entries(){
 	Value: v=DMARC1; p=reject
 	TTL: 5 min
 
-	Change Mail Settings to Custom MX and Add New Record
-	Record Type: MX
+	Record Type: A
 	Host: @
-	Value: ${domain}
-	Priority: 10
+	Value: ${extip}
 	TTL: 5 min
+
 	EOF
 
 	cat dnsentries.txt
