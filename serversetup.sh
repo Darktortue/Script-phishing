@@ -14,12 +14,13 @@ debian_init() {
 	update-rc.d nfs-common disable > /dev/null 2>&1
 	update-rc.d rpcbind disable > /dev/null 2>&1
 
+	echo
 	read -rp "Do you need to change the hostname of the machine ? (yY/nN) " answer
 	case ${answer:0:1} in
 		y|Y )
-			echo "Changing Hostname"
+			echo "Changing Hostname..."
 
-			read -p "Enter your hostname: " -r primary_domain
+			read -p "Enter your new hostname: " -r primary_domain
 
 			cat <<-EOF > /etc/hosts
 			127.0.1.1 $primary_domain $primary_domain
@@ -335,41 +336,41 @@ function dns_entries(){
 
 
 function install_gophish {
-	mkdir -vp /opt/gophish
-	cd /opt/gophish || exit
-	wget https://github.com/gophish/gophish/releases/download/v0.11.0/gophish-v0.11.0-linux-64bit.zip
-	unzip -v gophish-v0.11.0-linux-64bit.zip
+	path=/opt/gophish
+	mkdir -vp $path
+	wget https://github.com/Darktortue/sneaky-gophish/releases/download/v0.11.0/gophish-v0.11.0-linux-64bit.tar.gz
+	tar -xzvf gophish-v0.11.0-linux-64bit.tar.gz -C $path
+	rm -vf gophish-v0.11.0-linux-64bit.tar.gz
 	useradd -r gophish
-	mkdir -vp /var/log/gophish
-	chown -v gophish:gophish /var/log/gophish
-	chown -vR gophish:gophish /opt/gophish
-	setcap 'cap_net_bind_service=+ep' gophish
-    sed -i 's/"listen_url" : "127.0.0.1:3333"/"listen_url" : "0.0.0.0:3333"/g' config.json
-	read -r -p "Do you want to add an SSL certificate to your GoPhish? [y/N] " response
-	case "$response" in
-	[yY][eE][sS]|[yY])
-        	 read -p "Enter your web server's domain: " -r primary_domain
-		 	if [ -f "/etc/letsencrypt/live/${primary_domain}/fullchain.pem" ];then
-		 		ssl_cert="/etc/letsencrypt/live/${primary_domain}/fullchain.pem"
-       		 	ssl_key="/etc/letsencrypt/live/${primary_domain}/privkey.pem"
-       		 	cp "$ssl_cert" "${primary_domain}".crt
-        	 	cp "$ssl_key" "${primary_domain}".key
-        	 	sed -i "s/0.0.0.0:80/0.0.0.0:443/g" config.json
-        	 	sed -i "s/gophish_admin.crt/${primary_domain}.crt/g" config.json
-        	 	sed -i "s/gophish_admin.key/${primary_domain}.key/g" config.json
-				sed -i 's/"use_tls" : false/"use_tls" : true/g' config.json
-        	 	sed -i "s/example.crt/${primary_domain}.crt/g" config.json
-        	 	sed -i "s/example.key/${primary_domain}.key/g" config.json
-		 	else
-				echo "Certificate not found, use Install SSL option first"
-		 	fi
-       		 	;;
-    		*)
-        		echo "GoPhish installed"
-        		;;
-	esac
+	chown -R gophish:gophish $path
+	chmod +x $path/gophish
+	setcap 'cap_net_bind_service=+ep' $path/gophish
+    sed -i 's/"127.0.0.1:3333"/"0.0.0.0:3333"/g' $path/config.json
+	echo "Adding SSL certificate to Gophish..."
+	sleep 2
+	read -p "Enter your web server's domain: " -r primary_domain
+	if [ -f "/etc/letsencrypt/live/${primary_domain}/fullchain.pem" ];then
+		ssl_cert="/etc/letsencrypt/live/${primary_domain}/fullchain.pem"
+		ssl_key="/etc/letsencrypt/live/${primary_domain}/privkey.pem"
+		cp "$ssl_cert" $path/"${primary_domain}".crt
+		cp "$ssl_key" $path/"${primary_domain}".key
+		chown gophish:gophish $path/"${primary_domain}".*
+		sed -i "s/0.0.0.0:80/0.0.0.0:443/g" $path/config.json
+		sed -i "s/gophish_admin.crt/${primary_domain}.crt/g" $path/config.json
+		sed -i "s/gophish_admin.key/${primary_domain}.key/g" $path/config.json
+		sed -i 's/false/true/g' $path/config.json
+		sed -i "s/example.crt/${primary_domain}.crt/g" $path/config.json
+		sed -i "s/example.key/${primary_domain}.key/g" $path/config.json
+		echo "SSL certificate installed."
+	else
+		echo "Certificate not found, use Install SSL option first"
+	fi
 
-	echo "Configuration of the GoPhish systemd service..."
+	sleep 2
+
+	echo
+	echo "Configuration of the Gophish systemd service..."
+	echo
 	sleep 1
 
 	touch /etc/systemd/system/gophish.service
@@ -390,8 +391,14 @@ function install_gophish {
 	WantedBy=multi-user.target
 	EOF
 
-cat /etc/systemd/system/gophish.service
-sleep 2
+	systemctl enable gophish.service
+	systemctl start gophish.service
+	sleep 2
+
+	echo
+	echo "Gophish installed."
+	sleep 2
+	echo
 }
 
 
